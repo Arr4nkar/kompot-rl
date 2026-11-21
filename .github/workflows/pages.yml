@@ -1,0 +1,56 @@
+name: Test, build and deploy JupyterLite
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-lite.txt
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt -r requirements-lite.txt
+      - name: Test the MDP and learners
+        run: python -m unittest discover -s tests -v
+      - name: Build JupyterLite
+        run: python scripts/build_site.py
+      - name: Upload static site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _output
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
